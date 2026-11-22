@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Урок дома · ОЦ «О.К.С.Ф.О.Р.Д»</title>
+<meta name="description" content="Пропустил занятие? Пройди урок дома за 15–20 минут вместе с Окси и Фордом.">
+<meta name="theme-color" content="#1F3FA8">
+<link rel="icon" href="assets/oksi.png">
+<link rel="apple-touch-icon" href="assets/oksi.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--blue:#1F3FA8;--deep:#132661;--sky:#EAF0FF;--sun:#F5C842;--ink:#15193A;--mu:#5B6488;--card:#fff;--line:#DCE4FA;
+--h:"Baloo 2",system-ui,sans-serif;--b:"Nunito",-apple-system,system-ui,sans-serif}
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--b);color:var(--ink);background:linear-gradient(180deg,#F3F6FF 0%,#FFFFFF 60%);min-height:100svh;-webkit-font-smoothing:antialiased}
+.wrap{max-width:720px;margin:0 auto;padding:0 18px calc(32px + env(safe-area-inset-bottom))}
+header{position:relative;padding:28px 0 8px;text-align:center;overflow:hidden}
+.brand{font-family:var(--h);font-weight:800;letter-spacing:.06em;color:var(--blue);font-size:15px}
+h1{font-family:var(--h);font-weight:800;font-size:clamp(34px,8vw,52px);line-height:1;color:var(--deep);margin-top:6px}
+.lead{color:var(--mu);font-size:17px;margin:10px auto 0;max-width:30ch;line-height:1.4}
+.duo{position:relative;width:min(78vw,340px);margin:14px auto -6px;aspect-ratio:1448/1086}
+.duo img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 14px 24px rgba(19,38,97,.18));animation:float 5s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.bubble{position:absolute;top:2%;right:-4%;background:#fff;border:2px solid var(--line);border-radius:18px;padding:8px 12px;font-family:var(--h);font-weight:700;color:var(--deep);font-size:15px;box-shadow:0 8px 18px rgba(19,38,97,.08);opacity:0;animation:pop .5s .5s cubic-bezier(.2,1.4,.4,1) forwards}
+@keyframes pop{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:scale(1)}}
+.how{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:18px 0 4px}
+.how span{background:var(--sky);color:var(--deep);border-radius:999px;padding:7px 12px;font-size:14px;font-weight:700}
+.list{display:grid;gap:12px;margin-top:22px}
+a.course{display:grid;grid-template-columns:56px 1fr auto;align-items:center;gap:14px;text-decoration:none;color:inherit;background:var(--card);border:1.5px solid var(--line);border-radius:20px;padding:14px 16px;box-shadow:0 2px 0 var(--line);transition:transform .15s ease,box-shadow .15s ease,border-color .15s}
+a.course:active{transform:scale(.98)}
+@media (hover:hover){a.course:hover{transform:translateY(-2px);border-color:var(--blue);box-shadow:0 10px 22px rgba(31,63,168,.12)}}
+.ic{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;font-family:var(--h);font-weight:800;font-size:18px;color:#fff;background:var(--c,var(--blue))}
+.t{font-family:var(--h);font-weight:800;font-size:20px;line-height:1.1;color:var(--deep)}
+.s{color:var(--mu);font-size:14px;margin-top:3px}
+.go{font-size:22px;color:var(--blue)}
+.note{margin-top:22px;background:var(--sky);border-radius:18px;padding:14px 16px;color:var(--deep);font-size:15px;line-height:1.45;display:flex;gap:12px;align-items:center}
+.note img{width:58px;flex:none}
+footer{margin-top:26px;text-align:center;color:var(--mu);font-size:13px;line-height:1.5}
+footer a{color:var(--blue)}
+@media (prefers-reduced-motion:reduce){.duo img,.bubble{animation:none;opacity:1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="brand">ОЦ «О.К.С.Ф.О.Р.Д»</div>
+  <h1>Урок дома</h1>
+  <p class="lead">Пропустил занятие? Пройди его дома за 15–20 минут вместе с Окси и Фордом.</p>
+  <div class="duo"><img src="assets/oksi_ford.png" alt="Совы Окси и Форд" width="340" height="255"><div class="bubble">Let's go! 🦉</div></div>
+  <div class="how"><span>📱 с телефона</span><span>🔊 со звуком</span><span>⭐ «Я сделал» — учитель узнает</span></div>
+</header>
+
+<nav class="list" aria-label="Курсы">
+  <a class="course" href="genki/home/" style="--c:#F29A2E"><div class="ic">Gk</div><div><div class="t">Genki</div><div class="s">Малыши и первоклассники · «Точка старта»</div></div><div class="go">→</div></a>
+  <a class="course" href="gmf2/home/" style="--c:#1F3FA8"><div class="ic">G2</div><div><div class="t">Give Me Five! 2</div><div class="s">7–11 лет · «Вектор роста»</div></div><div class="go">→</div></a>
+  <a class="course" href="gmf3/home/" style="--c:#2E7D4F"><div class="ic">G3</div><div><div class="t">Give Me Five! 3</div><div class="s">7–11 лет · «Вектор роста»</div></div><div class="go">→</div></a>
+  <a class="course" href="gia1/home/" style="--c:#6C4FD8"><div class="ic">A1+</div><div><div class="t">Get Involved! A1+</div><div class="s">12–17 лет · «Уровень профи»</div></div><div class="go">→</div></a>
+  <a class="course" href="gia2/home/" style="--c:#C2416B"><div class="ic">A2</div><div><div class="t">Get Involved! A2</div><div class="s">12–17 лет · «Уровень профи»</div></div><div class="go">→</div></a>
+</nav>
+
+<div class="note"><img src="assets/oksi_cheer.png" alt=""><div>Ссылку на нужный урок обычно присылает Окси в мессенджере. Если не знаете, какой урок пройти, напишите администратору.</div></div>
+
+<footer>ОЦ «О.К.С.Ф.О.Р.Д» · г. Видное, Завидная ул., 9 · <a href="tel:+79167023959">+7 (916) 702-39-59</a><br><a href="https://oxfordclub2016.ru">oxfordclub2016.ru</a></footer>
+</div>
+</body>
+</html>
