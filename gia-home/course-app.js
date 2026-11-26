@@ -466,18 +466,92 @@ const readingSkills = {
     'Раздели утверждение, проверку и исправление. Как читатель может проверить источник?'
   ]
 };
+function renderReading(root,reading,collapsible=false) {
+  const panel=el(collapsible?'details':'article','','sheet reading-copy');
+  panel.lang='en';
+  if(collapsible){
+    const label=el('summary','Открыть текст · '+reading.title);label.lang='ru';panel.append(label);
+  }else{
+    panel.append(el('h3',reading.title));
+  }
+  reading.paragraphs.forEach((paragraph,index)=>{
+    const line=el('p');
+    const number=el('span',String(index+1),'reading-paragraph-number');
+    number.setAttribute('aria-hidden','true');
+    line.append(number,' ');
+    paragraph.split(/\*\*/).forEach((part,at)=>line.append(at%2?el('strong',part):part));
+    panel.append(line);
+  });
+  root.append(panel);
+}
+function definitionsMatch(root,key,definitions) {
+  const tile=el('section','','sheet');
+  const doneRows=new Set();
+  const count=status();
+  count.textContent='Совпадений: 0 из '+definitions.length;
+  tile.append(count);
+  const words=definitions.map(([word])=>word).sort((a,b)=>a.localeCompare(b,'en'));
+  const order=[...definitions.slice(2),...definitions.slice(0,2)];
+  order.forEach(([word,definition],index)=>{
+    const field=el('div','','definition-row');
+    const select=el('select');
+    select.id=key+'-definition-'+index;
+    select.lang='en';
+    const label=el('label',definition);
+    label.lang='en';label.htmlFor=select.id;
+    const feedback=status();feedback.id=select.id+'-feedback';
+    select.setAttribute('aria-describedby',feedback.id);
+    const placeholder=el('option','Выбери слово');placeholder.value='';select.append(placeholder);
+    words.forEach(option=>{const choice=el('option',option);choice.value=option;select.append(choice);});
+    select.addEventListener('change',()=>{
+      if(!select.value){
+        select.removeAttribute('aria-invalid');
+        feedback.textContent='';
+        return;
+      }
+      if(select.value!==word){
+        select.setAttribute('aria-invalid','true');
+        feedback.className='feedback error';
+        feedback.textContent='Не подходит. Правильная пара: '+word+' — '+definition+'.';
+        return;
+      }
+      select.removeAttribute('aria-invalid');
+      select.disabled=true;
+      feedback.className='feedback success';
+      feedback.textContent='✓ '+word+' — '+definition+'.';
+      doneRows.add(index);
+      count.textContent='Совпадений: '+doneRows.size+' из '+definitions.length;
+      if(doneRows.size===definitions.length)finishStep(key);
+    });
+    field.append(label,select,feedback);
+    tile.append(field);
+  });
+  root.append(tile);
+}
+function readingTrueFalse(rows) {
+  return rows.map(([result,statement,evidence])=>[
+    statement,['True','False'],result==='T'?'True':'False',(result==='T'?'True. ':'False. ')+evidence
+  ]);
+}
 function readingSteps(unit, number) {
+  const article=unit.readingLesson;
   return [
-    [null,'Перед чтением','Прочитай подсказку к этому тексту.',root=>{
-      card(root,unit.title);card(root,unit.topic,'ru');card(root,readingSkills[course.id][number-1],'ru');
+    [null,'Перед чтением','Прочитай заголовок и предположи, о чём будет текст.',root=>{
+      card(root,article.title);card(root,unit.topic,'ru');card(root,readingSkills[course.id][number-1],'ru');
     }],
-    [null,'Чтение','Прочитай авторский текст. Примени приём из предыдущего шага.',root=>{
-      card(root,unit.text);
+    [null,'Чтение','Прочитай текст целиком. Обрати внимание на слова, выделенные жирным.',root=>renderReading(root,article)],
+    ['understand','Главная мысль и детали','Ответь на вопросы по тексту.',root=>{
+      renderReading(root,article,true);quiz(root,'understand',choices(unit.reading));
     }],
-    ['understand','Понимание текста','Ответь на вопросы. Найди подтверждение в тексте.',root=>{
-      card(root,unit.text);quiz(root,'understand',choices(unit.reading));
+    ['trueFalse','True / False','Определи, какие утверждения верны по тексту. После ответа увидишь пояснение.',root=>{
+      renderReading(root,article,true);quiz(root,'trueFalse',readingTrueFalse(article.trueFalse));
     }],
-    talkStep('Summarise the text in three sentences. Explain which detail was most important and why.')
+    ['gapFill','Gap filling','Впиши пропущенные слова по смыслу текста.',root=>{
+      renderReading(root,article,true);writing(root,'gapFill',article.gaps);
+    }],
+    ['definitions','Match the definitions','Сопоставь определения на английском со словами, выделенными жирным в тексте.',root=>{
+      renderReading(root,article,true);definitionsMatch(root,'definitions',article.definitions);
+    }]
   ];
 }
 let media;
@@ -544,13 +618,13 @@ function buildSteps(item) {
     case 'test': return [
       ['lexis','Лексика','Выбери правильные выражения.',root=>quiz(root,'lexis',choices(wordItems(unit.words).filter((_,i)=>i%2===0)))],
       ['forms','Грамматика','Впиши подходящую форму.',root=>writing(root,'forms',unit.grammar.flatMap(grammar=>grammar.items.slice(0,3).map(([prompt,right])=>[prompt,[right]])))],
-      ['readtest','Чтение','Прочитай текст и ответь на вопросы.',root=>{card(root,unit.text);quiz(root,'readtest',choices(unit.reading));}],
+      ['readtest','Чтение','Прочитай текст и ответь на вопросы.',root=>{renderReading(root,unit.readingLesson);quiz(root,'readtest',readingTrueFalse(unit.readingLesson.trueFalse));}],
       ['listentest','Аудирование','Послушай диалог и проверь понимание.',root=>{audioPart(root,item);quiz(root,'listentest',choices(unit.extendedListening.slice(2)));}]
     ];
     case 'review': return [
       ['reviewWords','Лексика двух юнитов','Вспомни значения.',root=>quiz(root,'reviewWords',choices(item.units.flatMap(unit=>wordItems(unit.words.slice(0,6))).filter((_,i)=>i%2===0)))],
       ['reviewRule','Грамматика двух юнитов','Выбери форму.',root=>quiz(root,'reviewRule',choices(item.units.flatMap(unit=>unit.grammar.flatMap(grammar=>grammarItems(grammar).slice(0,2)))))],
-      ...item.units.map((unit,i)=>['reviewRead'+i,'Чтение · '+unit.title,'Найди подтверждение в тексте.',root=>{card(root,unit.text);quiz(root,'reviewRead'+i,choices(unit.reading));}]),
+      ...item.units.map((unit,i)=>['reviewRead'+i,'Чтение · '+unit.title,'Найди подтверждение в тексте.',root=>{renderReading(root,unit.readingLesson);quiz(root,'reviewRead'+i,choices(unit.reading));}]),
       talkStep('Choose one topic from these units. Give an example from your own experience and explain your opinion.')
     ];
     default: return [];
@@ -580,7 +654,7 @@ function show(index,focus=true){
   paint();
 }
 function renderLesson(item){
-  storageKey=course.id+':home-v2:'+item.id;
+  storageKey=course.id+(item.kind==='reading'?':reading-v3:':':home-v2:')+item.id;
   try {saved=JSON.parse(localStorage.getItem(storageKey))||{};}catch{}
   done=new Set(saved.done||[]);
   const steps=buildSteps(item);
