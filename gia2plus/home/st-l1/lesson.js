@@ -35,12 +35,31 @@ function status() {
   node.setAttribute('role','status');
   return node;
 }
+let activeTrack;
+function stopAudio() {
+  window.speechSynthesis?.cancel();
+  if (activeTrack) {
+    activeTrack.pause();
+    activeTrack = undefined;
+  }
+}
+async function playTrack(name, feedback) {
+  stopAudio();
+  const track = new Audio('audio/' + name.toLowerCase() + '.mp3');
+  activeTrack = track;
+  feedback.textContent = '';
+  try {
+    await track.play();
+  } catch {
+    if (activeTrack === track) feedback.textContent = 'Запись не открылась. Нажми «Послушать» ещё раз.';
+  }
+}
 function speak(text, feedback) {
   if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
     feedback.textContent = 'Озвучка недоступна на этом устройстве.';
     return;
   }
-  window.speechSynthesis.cancel();
+  stopAudio();
   const audio = new SpeechSynthesisUtterance(text);
   audio.lang = 'en-GB';
   audio.rate = .86;
@@ -127,14 +146,14 @@ function writing(root, key, items) {
 }
 
 const lesson = [
-  ['profiles','Meet two students','Прочитай два профиля. При желании послушай запись браузера.', root => {
+  ['profiles','Meet two students','Прочитай два профиля. Нажми «Послушать», чтобы услышать каждого героя.', root => {
     const cards = el('div','','grid');
     for (const [name,text] of profiles) {
       const card = el('article','','sheet');
       const paragraph = el('p',text);
       paragraph.lang = 'en';
       const feedback = status();
-      card.append(el('strong',name),paragraph,btn('🔊 Послушать',()=>speak(text,feedback)),feedback);
+      card.append(el('strong',name),paragraph,btn('🔊 Послушать',()=>playTrack(name,feedback)),feedback);
       cards.append(card);
     }
     root.append(cards,btn('Профили прочитаны',()=>finishStep('profiles'),'primary'));
@@ -187,7 +206,7 @@ const lesson = [
     const transcript=el('p',text);
     transcript.lang='en';
     details.append(el('summary','Показать текст аудио'),transcript);
-    root.append(btn('▶ Слушать',()=>speak(text,feedback),'primary'),feedback,details);
+    root.append(btn('▶ Слушать',()=>playTrack('Oli',feedback),'primary'),feedback,details);
     writing(root,'listening',[
       ['Where does Oli live? (город)',['York']],
       ['How many sisters has Oli got?',['one','1','one sister']],
@@ -288,7 +307,7 @@ function paint(){
 }
 function show(index,focus=true){
   if(index<0 || index>=panels.length)return;
-  window.speechSynthesis?.cancel();
+  stopAudio();
   current=index;
   panels.forEach((panel,at)=>{panel.hidden=at!==index;});
   stage.scrollTop=0;
