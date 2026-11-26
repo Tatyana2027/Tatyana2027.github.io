@@ -1,0 +1,6 @@
+Original lesson text by ОЦ «О.К.С.Ф.О.Р.Д» / Codex.
+Speech synthesized with Piper, with adjusted pitch and loudness.
+Nina: Piper en_GB-cori-medium. Source dataset: Hi-Fi Multi-Speaker English TTS Dataset, NVIDIA Corporation, CC BY 4.0, https://www.openslr.org/109/
+Leo and Oli: Piper en_GB-northern_english_male-medium. Source dataset: OpenSLR 83, CC BY-SA 4.0, https://www.openslr.org/83/
+The Leo and Oli MP3 recordings are available under CC BY-SA 4.0: https://creativecommons.org/licenses/by-sa/4.0/
+Voice models: https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_GB
