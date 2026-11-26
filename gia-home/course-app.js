@@ -140,10 +140,13 @@ function writing(root, key, items) {
 
 
 function vocabularyGroup(unit,kind) {
-  return kind==='vocab'?unit.vocabularyGroups?.[0]:kind==='vocab2'?unit.vocabularyGroups?.[1]:undefined;
+  return kind==='vocab'?unit?.vocabularyGroups?.[0]:kind==='vocab2'?unit?.vocabularyGroups?.[1]:undefined;
 }
 function vocabularySteps(unit,kind) {
   const group=vocabularyGroup(unit,kind);
+  if(group?.packs) return group.packs.flatMap((pack,index)=>wordSteps(pack.words,pack.contexts,undefined,{
+    prefix:'pack'+(index+1)+'-', label:pack.label, allWords:true
+  }));
   const start=kind==='vocab'?0:6;
   const end=kind==='vocab'?6:undefined;
   return wordSteps(group?.words??unit.words.slice(start,end),
@@ -233,7 +236,7 @@ function wordItems(words) {
 function grammarItems(grammar) {
   return grammar.items.map(([prompt,right,wrong])=>[prompt,right,...wrong.split(',')]);
 }
-function wordChallenge(root,words,contexts) {
+function wordChallenge(root,words,contexts,key='challenge') {
   const round=el('section','','sheet');
   const feedback=status();
   const counter=el('strong');
@@ -253,7 +256,7 @@ function wordChallenge(root,words,contexts) {
       });
       round.replaceChildren(result,el('div','','actions'));
       round.lastElementChild.append(retry);
-      finishStep('challenge');return;
+      finishStep(key);return;
     }
     counter.textContent='Раунд '+(index+1)+' из '+words.length;
     prompt.textContent=contexts[index];
@@ -289,27 +292,30 @@ function wordChallenge(root,words,contexts) {
   round.append(counter,prompt,bank,feedback);
   root.append(round);draw();
 }
-function wordSteps(words, contexts, partners) {
+function wordSteps(words, contexts, partners, options={}) {
+  const key=name=>(options.prefix||'')+name;
+  const caption=text=>options.label?text+' · '+options.label:text;
   const steps = [
-    ['words','Карточки','Послушай выражения и прочитай перевод.',root=>{
+    [key('words'),caption('Карточки'),'Послушай выражения и прочитай перевод.',root=>{
       const grid=el('div','','grid');const heard=new Set();
+      if(options.label)root.append(el('p',words.length+' слов в этом наборе.'));
       words.forEach(([word,translation],index)=>{
         const tile=el('article','','sheet');const feedback=status();
-        tile.append(btn('🔊 '+word,()=>{speak(word,feedback);heard.add(index);if(heard.size===words.length)finishStep('words');}),
+        tile.append(btn('🔊 '+word,()=>{speak(word,feedback);heard.add(index);if(heard.size===words.length)finishStep(key('words'));}),
           el('p',translation),feedback);grid.append(tile);
       });root.append(grid);
     }],
-    ['meaning','Значение слов','Выбери подходящий перевод.',root=>quiz(root,'meaning',choices(wordItems(words)))],
-    ['spell','Напиши по-английски','Впиши выражения. При ошибке карточка покажет исправление.',root=>
-      writing(root,'spell',words.slice(0,4).map(([english,russian])=>['«'+russian+'»',[english]]))]
+    [key('meaning'),caption('Значение слов'),'Выбери подходящий перевод.',root=>quiz(root,key('meaning'),choices(wordItems(words)))],
+    [key('spell'),caption('Напиши по-английски'),'Впиши выражения. При ошибке карточка покажет исправление.',root=>
+      writing(root,key('spell'),(options.allWords?words:words.slice(0,4)).map(([english,russian])=>['«'+russian+'»',[english]]))]
   ];
   if (contexts) {
     if (partners?.length) steps.push(['partners','Слова-партнёры','Выбери слово, чтобы получилось естественное сочетание.',root=>
       quiz(root,'partners',choices(partners))]);
     steps.push(
-      ['challenge','Лексическая игра','В каждом раунде подбери выражение к ситуации. После ошибки появится подсказка.',root=>wordChallenge(root,words,contexts)],
-      ['contextWrite','Лексика без подсказок','Впиши выражение в предложение. Проверь написание и смысл.',root=>
-        writing(root,'contextWrite',contexts.map((prompt,index)=>[prompt,[words[index][0]]]))]
+      [key('challenge'),caption('Лексическая игра'),'В каждом раунде подбери выражение к ситуации. После ошибки появится подсказка.',root=>wordChallenge(root,words,contexts,key('challenge'))],
+      [key('contextWrite'),caption('Лексика без подсказок'),'Впиши выражение в предложение. Проверь написание и смысл.',root=>
+        writing(root,key('contextWrite'),contexts.map((prompt,index)=>[prompt,[words[index][0]]]))]
     );
     if (partners?.length) steps.push(['wordBuilding','Семьи слов','Выбери нужную часть речи по контексту.',root=>
       writing(root,'wordBuilding',[
@@ -673,7 +679,7 @@ function show(index,focus=true){
 function renderLesson(item){
   const vocabularyChanged=item.unit?.vocabularyGroups&&['vocab','vocab2','test'].includes(item.kind) ||
     item.units?.some(unit=>unit.vocabularyGroups);
-  storageKey=course.id+(vocabularyChanged?':vocabulary-v4:':item.kind==='reading'?':reading-v3:':':home-v2:')+item.id;
+  storageKey=course.id+(vocabularyGroup(item.unit,item.kind)?.packs?':vocabulary-v5:':vocabularyChanged?':vocabulary-v4:':item.kind==='reading'?':reading-v3:':':home-v2:')+item.id;
   try {saved=JSON.parse(localStorage.getItem(storageKey))||{};}catch{}
   done=new Set(saved.done||[]);
   const steps=buildSteps(item);
@@ -686,7 +692,8 @@ function renderLesson(item){
   steps.forEach(([,name],index)=>plan.append(btn(name,()=>show(index+1))));
   const copyStatus=status();
   cover.append(owl,el('h1',heading),el('p',title+' · Урок дома','lead'),
-    el('p',item.source),plan,btn('Начать →',()=>show(1),'primary'),copyButton(href(item),copyStatus),copyStatus);
+    el('p',item.source),
+    ...(vocabularyGroup(item.unit,item.kind)?.packs?[el('p','Стр. 25: 12 предметов · стр. 24: ещё 9 слов')]:[]),plan,btn('Начать →',()=>show(1),'primary'),copyButton(href(item),copyStatus),copyStatus);
   panels=[cover,...steps.map(([key,name,hint,render],index)=>{
     const panel=el('section','','slide');if(key)panel.dataset.key=key;
     const h2=el('h2');h2.append(el('span',String(index+1),'number'),name);
