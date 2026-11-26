@@ -11,6 +11,8 @@ let done = new Set();
 let panels = [];
 let dotButtons = [];
 let summary;
+let assessedSteps=0;
+let completion;
 
 function el(tag, text = '', classes = '') {
   const node = document.createElement(tag);
@@ -203,9 +205,6 @@ function card(root,text,lang='en') {
   const piece=el('article','','sheet article-copy');const p=el('p',text);p.lang=lang;
   piece.append(p);root.append(piece);return piece;
 }
-function mark(root,key,label='Сделано') {
-  root.append(btn(label,()=>finishStep(key),'primary'));
-}
 function choices(questions) {
   return questions.map(([prompt,right,...wrong],index)=>{
     const options=wrong.slice();
@@ -219,8 +218,62 @@ function wordItems(words) {
 function grammarItems(grammar) {
   return grammar.items.map(([prompt,right,wrong])=>[prompt,right,...wrong.split(',')]);
 }
-function wordSteps(words) {
-  return [
+function wordChallenge(root,words,contexts) {
+  const round=el('section','','sheet');
+  const feedback=status();
+  const counter=el('strong');
+  const prompt=el('p');prompt.lang='en';
+  const bank=el('div','','actions');
+  let index=0;
+  let misses=0;
+  let attempted=false;
+  let solved=false;
+  function draw() {
+    if(index===words.length) {
+      const result=el('strong','Раунд закончен: '+(words.length-misses)+' из '+words.length+' с первой попытки.');
+      const retry=btn('Сыграть ещё раз',()=>{
+        index=0;misses=0;
+        round.replaceChildren(counter,prompt,bank,feedback);
+        draw();
+      });
+      round.replaceChildren(result,el('div','','actions'));
+      round.lastElementChild.append(retry);
+      finishStep('challenge');return;
+    }
+    counter.textContent='Раунд '+(index+1)+' из '+words.length;
+    prompt.textContent=contexts[index];
+    feedback.textContent='';
+    attempted=false;solved=false;
+    const order=words.slice(index+1).concat(words.slice(0,index+1));
+    bank.replaceChildren(...order.map(([word,translation])=>btn(word,event=>{
+      if(solved)return;
+      const picked=event.currentTarget;
+      const [right,meaning]=words[index];
+      if(word!==right) {
+        if(!attempted)misses++;
+        attempted=true;picked.disabled=true;picked.classList.add('wrong');
+        feedback.className='feedback error';
+        feedback.textContent='«'+word+'» означает «'+translation+'». Здесь нужно слово со значением «'+meaning+'».';
+        return;
+      }
+      solved=true;
+      for(const option of bank.querySelectorAll('button'))option.disabled=true;
+      picked.classList.add('right');
+      feedback.className='feedback success';
+      feedback.textContent='✓ '+contexts[index].replace('___',right);
+      const forward=btn(index+1===words.length?'Результат':'Следующий раунд →',()=>{
+        forward.remove();index++;draw();
+        const focusTarget=bank.querySelector('button:not([disabled])');
+        focusTarget?.focus();
+      },'primary');
+      round.append(forward);
+    })));
+  }
+  round.append(counter,prompt,bank,feedback);
+  root.append(round);draw();
+}
+function wordSteps(words, contexts, partners) {
+  const steps = [
     ['words','Карточки','Послушай выражения и прочитай перевод.',root=>{
       const grid=el('div','','grid');const heard=new Set();
       words.forEach(([word,translation],index)=>{
@@ -233,39 +286,163 @@ function wordSteps(words) {
     ['spell','Напиши по-английски','Впиши выражения. При ошибке карточка покажет исправление.',root=>
       writing(root,'spell',words.slice(0,4).map(([english,russian])=>['«'+russian+'»',[english]]))]
   ];
+  if (contexts) {
+    if (partners?.length) steps.push(['partners','Слова-партнёры','Выбери слово, чтобы получилось естественное сочетание.',root=>
+      quiz(root,'partners',choices(partners))]);
+    steps.push(
+      ['challenge','Лексическая игра','В каждом раунде подбери выражение к ситуации. После ошибки появится подсказка.',root=>wordChallenge(root,words,contexts)],
+      ['contextWrite','Лексика без подсказок','Впиши выражение в предложение. Проверь написание и смысл.',root=>
+        writing(root,'contextWrite',contexts.map((prompt,index)=>[prompt,[words[index][0]]]))]
+    );
+    if (partners?.length) steps.push(['wordBuilding','Семьи слов','Выбери нужную часть речи по контексту.',root=>
+      writing(root,'wordBuilding',[
+        ['The team hopes to ___ an affordable device. (invention)',['invent']],
+        ['The student’s ___ was displayed at the fair. (invent)',['invention']],
+        ['An ___ can improve an existing idea. (invent)',['inventor']],
+        ['A ___ asked the cyclists to keep a record. (research)',['researcher']],
+        ['They carried out more ___ before changing the design. (researcher)',['research']]
+      ])]);
+
+  }
+  return steps;
 }
 function grammarSteps(grammar) {
   return [
-    ['rule','Правило','Прочитай правило и два примера.',root=>{
+    [null,'Правило','Прочитай правило и два примера.',root=>{
       card(root,grammar.rule,'ru');
       grammar.items.slice(0,2).forEach(([prompt,right])=>card(root,prompt.replace('___',right)));
-      mark(root,'rule','Правило прочитано');
     }],
     ['choose','Выбери форму','Заполни пропуски.',root=>quiz(root,'choose',choices(grammarItems(grammar)))],
     ['type','Впиши ответ','Проверь себя без вариантов ответа.',root=>
       writing(root,'type',grammar.items.map(([prompt,right])=>[prompt,[right]]))]
   ];
 }
-function writeStep(prompt) {
-  return ['draft','Напиши свой текст','Текст сохраняется в этом браузере.',root=>{
-    const sheet=card(root,prompt);
-    const area=el('textarea');area.id='writing-draft';area.lang='en';area.value=saved.profile||'';
-    const label=el('label','Твой текст');label.htmlFor=area.id;
+let stopRecording;
+function recordingPanel(root) {
+  const panel=el('details','','sheet');
+  panel.append(el('summary','🎙 Записать и прослушать себя'));
+  const feedback=status();
+  const playback=el('audio','','feature-audio');
+  playback.controls=true;playback.hidden=true;
+  let recorder, stream, recordingUrl, timer, preparing=false;
+  const release=()=>{
+    clearTimeout(timer);
+    stream?.getTracks().forEach(track=>track.stop());stream=undefined;
+  };
+  const stop=btn('Остановить запись',()=>{if(recorder?.state==='recording')recorder.stop();});
+  stop.disabled=true;
+  const start=btn('Начать запись',async()=>{
+    if(preparing||recorder?.state==='recording')return;
+    if(!window.MediaRecorder||!navigator.mediaDevices?.getUserMedia){
+      feedback.textContent='Запись недоступна в этом браузере. Можно напечатать ответ ниже.';return;
+    }
+    preparing=true;start.disabled=true;
+    const currentPanel=current;
+    try{
+      const input=await navigator.mediaDevices.getUserMedia({audio:true});
+      if(current!==currentPanel){input.getTracks().forEach(track=>track.stop());return;}
+      stream=input;
+      recorder=new MediaRecorder(stream);
+      const chunks=[];
+      recorder.addEventListener('dataavailable',event=>{if(event.data.size)chunks.push(event.data);});
+      recorder.addEventListener('stop',()=>{
+        release();stop.disabled=true;start.disabled=false;
+        if(stopRecording===stopActive)stopRecording=undefined;
+        if(!chunks.length){feedback.textContent='Запись пустая. Попробуй ещё раз.';return;}
+        if(recordingUrl)URL.revokeObjectURL(recordingUrl);
+        recordingUrl=URL.createObjectURL(new Blob(chunks,{type:recorder.mimeType}));
+        playback.src=recordingUrl;playback.hidden=false;
+        feedback.textContent='Запись готова. Прослушай себя. Понятны ли главная мысль и пример?';
+      },{once:true});
+      recorder.addEventListener('error',()=>{
+        release();stop.disabled=true;start.disabled=false;
+        feedback.textContent='Запись прервалась. Попробуй снова или напечатай ответ.';
+      },{once:true});
+      stopAudio();media?.pause();playback.pause();
+      const stopActive=()=>{if(recorder?.state==='recording')recorder.stop();};
+      stopRecording=stopActive;
+      recorder.start();timer=setTimeout(stopActive,120000);
+      stop.disabled=false;feedback.textContent='Идёт запись. Максимум две минуты.';
+    }catch{release();feedback.textContent='Микрофон недоступен. Проверь разрешение браузера или напечатай ответ.';}
+    finally{preparing=false;if(recorder?.state!=='recording')start.disabled=false;}
+  },'primary');
+  playback.addEventListener('play',()=>{stopAudio();media?.pause();recordingPlayback=playback;});
+  window.addEventListener('pagehide',()=>{release();if(recordingUrl)URL.revokeObjectURL(recordingUrl);},{once:true});
+  const actions=el('div','','actions');actions.append(start,stop);
+  panel.append(actions,feedback,playback,
+    el('p','Запись остаётся в этом браузере до закрытия страницы. Произношение можно проверить на слух.'));
+  root.append(panel);
+}
+let recordingPlayback;
+function responseStep(key,title,prompt,oral=false,options={}) {
+  const min=options.min??(oral?16:25);
+  const minSentences=options.sentences??2;
+  const grammar=options.connectors??['because','so','for example','however','although','since'];
+  const needsReason=!!options.connectors;
+  return [key,title,oral
+    ? 'Ответь вслух и прослушай себя. Для мгновенной проверки требований напечатай ответ ниже.'
+    :'Напиши ответ. Проверка сразу покажет, какие требования выполнены.',root=>{
+    card(root,prompt);
+    if(oral)recordingPanel(root);
+    const sheet=el('section','','sheet');
+    const list=el('ul');
+    list.append(el('li','Не меньше '+min+' слов по-английски.'),el('li','Не меньше '+minSentences+' предложений с точкой, вопросительным или восклицательным знаком.'));
+    if(options.terms?.length)list.append(el('li','Используй хотя бы одно выражение: '+options.terms.join(', ')+'.'));
+    if(needsReason)list.append(el('li','Используй хотя бы одно связующее выражение: '+grammar.join(', ')+'.'));
+    const area=el('textarea');area.id=key+'-draft';area.lang='en';area.value=saved.responses?.[key]||'';
+    const label=el('label','Твой ответ');label.htmlFor=area.id;
     const feedback=status();
-    area.addEventListener('input',()=>{saved.profile=area.value;persist();});
-    sheet.append(label,area,btn('Проверить по памятке',()=>{
-      const count=area.value.trim().split(/\s+/).filter(Boolean).length;
-      if(count<20){feedback.textContent='Добавь детали и поясни свою мысль.';return;}
-      feedback.textContent='Проверь, что ты выполнил все пункты задания, связал идеи и перечитал текст вслух.';
-      finishStep('draft');
-    },'primary'),feedback);
+    area.addEventListener('input',()=>{
+      saved.responses={...saved.responses,[key]:area.value};done.delete(key);persist();paint();
+      feedback.replaceChildren();
+    });
+    const check=btn('Проверить ответ',()=>{
+      const value=area.value.trim();
+      const words=value.match(/[A-Za-z]+(?:[’'-][A-Za-z]+)*/g)||[];
+      const sentences=value.split(/[.!?]+/).filter(piece=>(piece.match(/[A-Za-z]+/g)||[]).length>=3).length;
+      const punctuated=/[.!?]["”')]*$/.test(value);
+      const phraseText=' '+value.toLowerCase().replace(/[^a-z]+/g,' ').trim()+' ';
+      const hasPhrase=phrase=>phraseText.includes(' '+phrase.toLowerCase().replace(/[^a-z]+/g,' ').trim()+' ');
+      const reason=grammar.some(hasPhrase);
+      const checks=[
+        [words.length>=min,'Объём: '+words.length+' из '+min+' слов.'],
+        [sentences>=minSentences&&punctuated,'Предложения: '+sentences+' из '+minSentences+(punctuated?'.':'. Проверь знак в конце.')]
+      ];
+      if(options.terms?.length) {
+        const matched=options.terms.filter(hasPhrase);
+        checks.push([matched.length>0,matched.length?'Лексика по теме: '+matched.join(', ')+'.':'Добавь хотя бы одно выражение из списка.']);
+      }
+      if(needsReason)checks.push([reason,reason?'Связующее выражение есть.':'Добавь объяснение с '+grammar[0]+'.']);
+      const result=el('ul');
+      for(const [ok,message] of checks)result.append(el('li',(ok?'✓ ':'× ')+message));
+      const passed=checks.every(([ok])=>ok);
+      const guidance=el('p',passed?'Формальные требования выполнены. Сверь смысл с заданием и образцом.':'Исправь отмеченные пункты и проверь снова.');
+      feedback.className='feedback '+(passed?'success':'error');
+      feedback.replaceChildren(result,guidance);
+      if(passed)finishStep(key);
+    },'primary');
+    sheet.append(list,label,area,check,feedback);
+    root.append(sheet);
+    if(options.model){
+      const model=el('details','','sheet');model.append(el('summary','Сверить с примером ответа'));
+      const example=el('p',options.model);example.lang='en';
+      const modelFeedback=status();
+      model.append(example,btn('🔊 Послушать пример',()=>speak(options.model,modelFeedback)),modelFeedback);
+      root.append(model);
+    }else{
+      const model=el('details','','sheet');model.append(el('summary','Подсказка для самопроверки'));
+      const example=el('p',oral
+        ? 'My main point is … . For example, … . I think this matters because … .'
+        : 'I would choose … because … . One example is … . This shows that … .');example.lang='en';
+      model.append(example);root.append(model);
+    }
   }];
 }
-function talkStep(prompt) {
-  return ['talk','Скажи вслух','Подготовь ответ. Если есть собеседник, поменяйтесь ролями.',root=>{
-    card(root,prompt);
-    mark(root,'talk','Я выполнил устное задание');
-  }];
+function writeStep(prompt,options) {
+  return responseStep('draft','Напиши свой текст',prompt,false,options);
+}
+function talkStep(prompt,options) {
+  return responseStep('talk','Дай свой ответ',prompt,true,options);
 }
 const readingSkills = {
   gia2plus:[
@@ -291,11 +468,11 @@ const readingSkills = {
 };
 function readingSteps(unit, number) {
   return [
-    ['predict','Перед чтением','Прочитай подсказку к этому тексту.',root=>{
-      card(root,unit.title);card(root,unit.topic,'ru');card(root,readingSkills[course.id][number-1],'ru');mark(root,'predict','Я готов читать');
+    [null,'Перед чтением','Прочитай подсказку к этому тексту.',root=>{
+      card(root,unit.title);card(root,unit.topic,'ru');card(root,readingSkills[course.id][number-1],'ru');
     }],
-    ['text','Чтение','Прочитай авторский текст. Примени приём из предыдущего шага.',root=>{
-      card(root,unit.text);mark(root,'text','Текст прочитан');
+    [null,'Чтение','Прочитай авторский текст. Примени приём из предыдущего шага.',root=>{
+      card(root,unit.text);
     }],
     ['understand','Понимание текста','Ответь на вопросы. Найди подтверждение в тексте.',root=>{
       card(root,unit.text);quiz(root,'understand',choices(unit.reading));
@@ -304,39 +481,71 @@ function readingSteps(unit, number) {
   ];
 }
 let media;
-function audioPart(root,item) {
+function audioPart(root,item,showTranscript=false) {
   const audio=el('audio','','feature-audio');audio.controls=true;audio.preload='none';
-  audio.src='audio/u'+item.number+'.mp3';media=audio;
-  const transcript=el('details','','sheet');transcript.append(el('summary','Показать текст диалога'));
-  for(const [speaker,line] of item.unit.dialog){const p=el('p',speaker+': '+line);p.lang='en';transcript.append(p);}
-  root.append(audio,transcript);
+  audio.src='audio/extended-u'+item.number+'.mp3';
+  audio.addEventListener('play',()=>{
+    stopAudio();if(media!==audio)media?.pause();recordingPlayback?.pause();media=audio;
+  });
+  const feedback=status();
+  audio.addEventListener('error',()=>{feedback.textContent='Аудио не загрузилось. Попробуй обновить страницу.';});
+  root.append(audio,feedback);
+  if(showTranscript){
+    const transcript=el('details','','sheet');transcript.append(el('summary','Открыть текст для сверки'));
+    for(const [speaker,line] of item.unit.extendedDialog){const p=el('p',speaker+': '+line);p.lang='en';transcript.append(p);}
+    root.append(transcript);
+  }
+}
+function listeningSteps(item) {
+  const unit=item.unit;
+  const [gist,...remaining]=unit.extendedListening;
+  const details=remaining.slice(0,-1);
+  const inference=remaining.at(-1);
+  const steps=[
+    ['gist','Первое прослушивание','Послушай целиком. Выбери основную мысль.',root=>{
+      audioPart(root,item);quiz(root,'gist',choices([gist]));
+    }],
+    ['detail','Второе прослушивание','Переслушай и проверь детали: причины, время, условия и решения.',root=>{
+      audioPart(root,item);quiz(root,'detail',choices(details));
+    }],
+    ['inference','Что можно понять из разговора?','Обрати внимание на смысл последних реплик.',root=>{
+      audioPart(root,item);quiz(root,'inference',choices([inference]));
+    }]
+  ];
+  if(unit.notes)steps.push(['notes','Заполни заметки','Запиши короткие ответы. Каждая строка проверяется сразу.',root=>{
+    audioPart(root,item);writing(root,'notes',unit.notes);
+  }]);
+  steps.push(['transcript','Сверься с текстом','Проверь, какие выражения помогли тебе понять диалог.',root=>{
+    audioPart(root,item,true);
+    quiz(root,'transcript',choices([details.at(-1)]));
+  }]);
+  const prototype=course.id==='giab1'&&item.number===4;
+  steps.push(talkStep(prototype?'Explain whether you would approve the trial. Give one reason and suggest one fair test.':unit.speaking,
+    prototype?{connectors:['because','so','however'],terms:['trial','prototype','design','route'],model:'I would approve a supervised trial because the last test was too short. I would ask six cyclists to try both designs on the same route.'}:undefined));
+  return steps;
 }
 function buildSteps(item) {
   const unit=item.unit;
   switch(item.kind){
     case 'starter': return [...wordSteps(item.words),...grammarSteps(item.grammar),writeStep(item.writing)];
-    case 'vocab': return [...wordSteps(unit.words.slice(0,6)),talkStep('Choose three of the new expressions and use them to describe a real or imaginary situation.')];
-    case 'vocab2': return [...wordSteps(unit.words.slice(6)),talkStep(unit.speaking)];
+    case 'vocab': return [...wordSteps(unit.words.slice(0,6),unit.contexts.slice(0,6)),talkStep('Choose three of the new expressions and use them to describe a real or imaginary situation.')];
+    case 'vocab2': return [...wordSteps(unit.words.slice(6),unit.contexts.slice(6),unit.wordPartners),talkStep(unit.speaking)];
     case 'reading': return readingSteps(unit,item.number);
     case 'grammar1': return [...grammarSteps(unit.grammar[0]),talkStep('Make two true sentences using today’s grammar, then ask a partner a question.')];
     case 'grammar2': return [...grammarSteps(unit.grammar[1]),talkStep(unit.speaking)];
-    case 'listening': return [
-      ['audio','Послушай диалог','Первый раз послушай без текста. Во второй раз проверь детали.',root=>{audioPart(root,item);mark(root,'audio','Диалог прослушан');}],
-      ['understand','Проверь понимание','Выбери ответы на вопросы по записи.',root=>quiz(root,'understand',choices(unit.listening))],
-      talkStep(unit.speaking),
-      ['roleplay','Поменяйтесь ролями','Инсценируйте разговор. Измените одну деталь и задайте уточняющий вопрос.',root=>mark(root,'roleplay','Диалог готов')]
-    ];
+    case 'listening': return listeningSteps(item);
     case 'writing': return [
-      ['plan','Составь план','Запиши план на бумаге: начало, две детали и итог.',root=>{card(root,unit.writing);mark(root,'plan','План готов');}],
-      writeStep(unit.writing),
-      talkStep('Read your text aloud. Change one detail to make it clearer for a listener.'),
-      ['project','Мини-проект','Представь текст как карточку, одно слайдовое сообщение или заметку.',root=>mark(root,'project','Проект готов')]
+      [null,'Составь план','Подумай, с чего начнёшь, какие детали добавишь и чем закончишь.',root=>card(root,unit.writing)],
+      writeStep(unit.writing,{min:course.label==='B1'?45:30,sentences:3,connectors:['because','so','for example','however'],terms:unit.words.slice(0,6).map(([word])=>word)}),
+      responseStep('revision','Проверь и уточни','Choose one sentence from your text. Rewrite it with a clearer reason or example.',false,
+        {min:12,sentences:1,connectors:['because','for example','so']}),
+      talkStep('Summarise your text for a listener. Explain your choice and give one example.',{connectors:['because','for example','so']})
     ];
     case 'test': return [
       ['lexis','Лексика','Выбери правильные выражения.',root=>quiz(root,'lexis',choices(wordItems(unit.words).filter((_,i)=>i%2===0)))],
       ['forms','Грамматика','Впиши подходящую форму.',root=>writing(root,'forms',unit.grammar.flatMap(grammar=>grammar.items.slice(0,3).map(([prompt,right])=>[prompt,[right]])))],
       ['readtest','Чтение','Прочитай текст и ответь на вопросы.',root=>{card(root,unit.text);quiz(root,'readtest',choices(unit.reading));}],
-      ['listentest','Аудирование','Послушай диалог и проверь понимание.',root=>{audioPart(root,item);quiz(root,'listentest',choices(unit.listening));}]
+      ['listentest','Аудирование','Послушай диалог и проверь понимание.',root=>{audioPart(root,item);quiz(root,'listentest',choices(unit.extendedListening.slice(2)));}]
     ];
     case 'review': return [
       ['reviewWords','Лексика двух юнитов','Вспомни значения.',root=>quiz(root,'reviewWords',choices(item.units.flatMap(unit=>wordItems(unit.words.slice(0,6))).filter((_,i)=>i%2===0)))],
@@ -353,11 +562,14 @@ function paint(){
     dot.setAttribute('aria-current',index===current?'step':'false');
     dot.classList.toggle('complete',done.has(panels[index]?.dataset.key));
   });
-  if(summary)summary.textContent='Выполнено: '+done.size+' из '+(panels.length-2);
+  if(summary)summary.textContent='Задания с проверкой: '+done.size+' из '+assessedSteps;
+  if(completion)completion.textContent=done.size===assessedSteps
+    ? '✓ Все задания с проверкой выполнены.'
+    : 'Вернись к любому шагу без отметки и закончи задание. Результат обновится автоматически.';
 }
 function show(index,focus=true){
   if(index<0||index>=panels.length)return;
-  stopAudio();media?.pause();
+  stopAudio();media?.pause();recordingPlayback?.pause();stopRecording?.();
   current=index;
   panels.forEach((panel,at)=>{panel.hidden=at!==index;});
   stage.scrollTop=0;
@@ -368,10 +580,11 @@ function show(index,focus=true){
   paint();
 }
 function renderLesson(item){
-  storageKey=course.id+':home-v1:'+item.id;
+  storageKey=course.id+':home-v2:'+item.id;
   try {saved=JSON.parse(localStorage.getItem(storageKey))||{};}catch{}
   done=new Set(saved.done||[]);
   const steps=buildSteps(item);
+  assessedSteps=steps.filter(([key])=>key).length;
   const heading=item.unit?item.unit.title+' · '+item.title:item.title;
   document.title=heading+' · '+title;
   const cover=el('section','','slide cover');
@@ -382,16 +595,12 @@ function renderLesson(item){
   cover.append(owl,el('h1',heading),el('p',title+' · Урок дома','lead'),
     el('p',item.source),plan,btn('Начать →',()=>show(1),'primary'),copyButton(href(item),copyStatus),copyStatus);
   panels=[cover,...steps.map(([key,name,hint,render],index)=>{
-    const panel=el('section','','slide');panel.dataset.key=key;
+    const panel=el('section','','slide');if(key)panel.dataset.key=key;
     const h2=el('h2');h2.append(el('span',String(index+1),'number'),name);
     panel.append(h2,el('p',hint));render(panel);return panel;
   })];
-  const end=el('section','','slide cover');summary=status();const result=status();
-  if(saved.finished)result.textContent='Урок уже отмечен на этом устройстве.';
-  end.append(el('h2','Урок пройден?'),summary,btn('🎉 Я сделал!',()=>{
-    if(done.size<steps.length){result.textContent='Заверши все шаги, чтобы отметить урок.';return;}
-    saved.finished=true;persist();result.textContent='Урок отмечен на этом устройстве.';
-  },'primary'),result,link('← К списку уроков','./#'+groups.find(g=>g.lessons.includes(item)).id));
+  const end=el('section','','slide cover');summary=status();completion=status();
+  end.append(el('h2','Результат урока'),summary,completion,link('← К списку уроков','./#'+groups.find(g=>g.lessons.includes(item)).id));
   panels.push(end);
   dotButtons=panels.map((_,index)=>{
     const dot=btn('',()=>show(index));

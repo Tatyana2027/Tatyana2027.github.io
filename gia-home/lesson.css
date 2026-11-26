@@ -64,3 +64,9 @@ textarea{resize:vertical;min-height:90px}
 #stage h2[tabindex]:focus,#stage h1[tabindex]:focus{outline:none}
 .feature-audio{width:min(100%,480px);display:block;margin:10px auto}
 .article-copy{font-weight:600}
+.sheet ul {padding-inline-start:1.2rem}
+.sheet details[open],.sheet:has(>audio:not([hidden])){padding-block:14px}
+.sheet label{display:block}
+.sheet form label{margin-bottom:4px}
+.sheet .feedback li{margin-top:.12em}
+.sheet button.right:disabled,.sheet button.wrong:disabled{opacity:1}
