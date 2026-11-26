@@ -139,6 +139,21 @@ function writing(root, key, items) {
 }
 
 
+function vocabularyGroup(unit,kind) {
+  return kind==='vocab'?unit.vocabularyGroups?.[0]:kind==='vocab2'?unit.vocabularyGroups?.[1]:undefined;
+}
+function vocabularySteps(unit,kind) {
+  const group=vocabularyGroup(unit,kind);
+  const start=kind==='vocab'?0:6;
+  const end=kind==='vocab'?6:undefined;
+  return wordSteps(group?.words??unit.words.slice(start,end),
+    group?.contexts??unit.contexts.slice(start,end),kind==='vocab2'?unit.wordPartners:undefined);
+}
+function reviewVocabulary(unit) {
+  if(!unit.vocabularyGroups)return unit.words.slice(0,6);
+  return unit.vocabularyGroups.flatMap(group=>group.words.filter((_,i)=>i%3===0));
+}
+
 const groups = [{id:'starter', title:'Starter · What do you know?', lessons:[
   {id:'st-l1', title:course.id==='gia2plus'?'Meet two students':'My favourite things', kind:'external'},
   ...course.starter.map((item,index)=>({...item,id:'st-l'+(index+2),kind:'starter'}))
@@ -152,8 +167,8 @@ for (const [index,unit] of course.units.entries()) {
   const number=index+1;
   groups.push({id:'u'+number,title:'Unit '+number+' · '+unit.title,topic:unit.topic,lessons:lessonKinds.map(([kind,label],at)=>({
     id:'u'+number+'-'+(kind==='test'?'test':'l'+(at+1)),kind,unit,number,
-    title:kind==='grammar1'?unit.grammar[0].title:kind==='grammar2'?unit.grammar[1].title:label,
-    source:'Student’s Book · Unit '+number+' · с. '+unit.page+'–'+(unit.page+11)
+    title:vocabularyGroup(unit,kind)?.title??(kind==='grammar1'?unit.grammar[0].title:kind==='grammar2'?unit.grammar[1].title:label),
+    source:'Student’s Book · Unit '+number+' · с. '+(vocabularyGroup(unit,kind)?.page??(unit.page+'–'+(unit.page+11)))
   }))});
 }
 groups.push({id:'u9',title:'Unit 9 · Look what you know!',lessons:Array.from({length:4},(_,index)=>({
@@ -244,7 +259,9 @@ function wordChallenge(root,words,contexts) {
     prompt.textContent=contexts[index];
     feedback.textContent='';
     attempted=false;solved=false;
-    const order=words.slice(index+1).concat(words.slice(0,index+1));
+    const distractors=words.slice(index+1).concat(words.slice(0,index)).slice(0,5);
+    const order=distractors.slice();
+    order.splice((index*3+1)%(distractors.length+1),0,words[index]);
     bank.replaceChildren(...order.map(([word,translation])=>btn(word,event=>{
       if(solved)return;
       const picked=event.currentTarget;
@@ -602,8 +619,8 @@ function buildSteps(item) {
   const unit=item.unit;
   switch(item.kind){
     case 'starter': return [...wordSteps(item.words),...grammarSteps(item.grammar),writeStep(item.writing)];
-    case 'vocab': return [...wordSteps(unit.words.slice(0,6),unit.contexts.slice(0,6)),talkStep('Choose three of the new expressions and use them to describe a real or imaginary situation.')];
-    case 'vocab2': return [...wordSteps(unit.words.slice(6),unit.contexts.slice(6),unit.wordPartners),talkStep(unit.speaking)];
+    case 'vocab': return [...vocabularySteps(unit,'vocab'),talkStep('Choose three of the new expressions and use them to describe a real or imaginary situation.')];
+    case 'vocab2': return [...vocabularySteps(unit,'vocab2'),talkStep(unit.speaking)];
     case 'reading': return readingSteps(unit,item.number);
     case 'grammar1': return [...grammarSteps(unit.grammar[0]),talkStep('Make two true sentences using today’s grammar, then ask a partner a question.')];
     case 'grammar2': return [...grammarSteps(unit.grammar[1]),talkStep(unit.speaking)];
@@ -622,7 +639,7 @@ function buildSteps(item) {
       ['listentest','Аудирование','Послушай диалог и проверь понимание.',root=>{audioPart(root,item);quiz(root,'listentest',choices(unit.extendedListening.slice(2)));}]
     ];
     case 'review': return [
-      ['reviewWords','Лексика двух юнитов','Вспомни значения.',root=>quiz(root,'reviewWords',choices(item.units.flatMap(unit=>wordItems(unit.words.slice(0,6))).filter((_,i)=>i%2===0)))],
+      ['reviewWords','Лексика двух юнитов','Вспомни значения.',root=>quiz(root,'reviewWords',choices(item.units.flatMap(unit=>wordItems(reviewVocabulary(unit))).filter((_,i)=>i%2===0)))],
       ['reviewRule','Грамматика двух юнитов','Выбери форму.',root=>quiz(root,'reviewRule',choices(item.units.flatMap(unit=>unit.grammar.flatMap(grammar=>grammarItems(grammar).slice(0,2)))))],
       ...item.units.map((unit,i)=>['reviewRead'+i,'Чтение · '+unit.title,'Найди подтверждение в тексте.',root=>{renderReading(root,unit.readingLesson);quiz(root,'reviewRead'+i,choices(unit.reading));}]),
       talkStep('Choose one topic from these units. Give an example from your own experience and explain your opinion.')
@@ -654,7 +671,9 @@ function show(index,focus=true){
   paint();
 }
 function renderLesson(item){
-  storageKey=course.id+(item.kind==='reading'?':reading-v3:':':home-v2:')+item.id;
+  const vocabularyChanged=item.unit?.vocabularyGroups&&['vocab','vocab2','test'].includes(item.kind) ||
+    item.units?.some(unit=>unit.vocabularyGroups);
+  storageKey=course.id+(vocabularyChanged?':vocabulary-v4:':item.kind==='reading'?':reading-v3:':':home-v2:')+item.id;
   try {saved=JSON.parse(localStorage.getItem(storageKey))||{};}catch{}
   done=new Set(saved.done||[]);
   const steps=buildSteps(item);
